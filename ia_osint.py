@@ -20,39 +20,33 @@ FEEDS_IA_OSINT = [
 ]
 
 def clean_html_to_pure_text(raw_html, max_length=350):
-    """Remove todas as tags HTML, imagens, links e deixa apenas texto puro para tradução."""
     if not raw_html:
         return "Sem resumo disponível."
     
     soup = BeautifulSoup(raw_html, "html.parser")
     
-    # Remove tags de imagens, scripts e estilos que poluem o texto
     for element in soup(["script", "style", "img", "figure", "a"]):
         element.decompose()
         
     text = soup.get_text(separator=" ").strip()
-    text = " ".join(text.split()) # Remove múltiplos espaços e quebras de linha
+    text = " ".join(text.split())
     
     if len(text) > max_length:
         text = text[:max_length] + "..."
     return text if text else "Sem resumo disponível."
 
 def translate_to_pt(text):
-    """Traduz texto puro do Inglês para o Português."""
     if not text or text == "Sem resumo disponível.":
         return text
     try:
-        translated = GoogleTranslator(source='auto', target='pt').translate(text)
-        return translated
+        return GoogleTranslator(source='auto', target='pt').translate(text)
     except Exception as e:
         print(f"Erro na tradução: {e}")
         return text
 
 def send_discord_embed(title, link, summary, source_name, category):
-    """Envia o Embed formatado com o nome do Bot correto."""
+    """Envia a mensagem mantendo o nome e imagem originais do Webhook no Discord."""
     payload = {
-        "username": "IA & OSINT Intel",
-        "avatar_url": "https://cdn-icons-png.flaticon.com/512/2103/2103633.png",
         "embeds": [
             {
                 "title": f"[{category}] {title}",
@@ -80,14 +74,10 @@ def main():
             link = latest.link
             raw_summary = getattr(latest, 'summary', getattr(latest, 'description', ''))
             
-            # 1. Limpa o texto completamente primeiro
             clean_text = clean_html_to_pure_text(raw_summary)
-            
-            # 2. Traduz título e resumo já limpo
             title_pt = translate_to_pt(raw_title)
             summary_pt = translate_to_pt(clean_text)
             
-            # 3. Dispara para o Discord
             send_discord_embed(title_pt, link, summary_pt, source["name"], source["category"])
 
 if __name__ == "__main__":
