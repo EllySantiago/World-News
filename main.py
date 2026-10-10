@@ -1,60 +1,72 @@
 import os
 import requests
 import feedparser
-from html2text import html2text
+from bs4 import BeautifulSoup
 from deep_translator import GoogleTranslator
 
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL")
 
-# Feeds de vários países (EUA, Europa, Brasil)
-FEEDS = [
-    {"name": "The Hacker News (EUA)", "url": "https://feeds.feedburner.com/TheHackersNews"},
-    {"name": "BleepingComputer (EUA)", "url": "https://www.bleepingcomputer.com/feed/"},
-    {"name": "The Record (EUA)", "url": "https://therecord.media/feed"},
-    {"name": "SecurityWeek (EUA)", "url": "https://www.securityweek.com/feed/"},
-    {"name": "CISO Advisor (Brasil)", "url": "https://www.cisoadvisor.com.br/feed/"}
+FEEDS_CYBER = [
+    {"name": "The Hacker News", "url": "https://feeds.feedburner.com/TheHackersNews"},
+    {"name": "BleepingComputer", "url": "https://www.bleepingcomputer.com/feed/"},
+    {"name": "The Record", "url": "https://therecord.media/feed"},
+    {"name": "SecurityWeek", "url": "https://www.securityweek.com/feed/"},
+    {"name": "CISO Advisor", "url": "https://www.cisoadvisor.com.br/feed/"}
 ]
 
-def translate_to_pt(text):
-    """Traduz textos de qualquer idioma para o Português."""
-    try:
-        if not text.strip():
-            return "Sem resumo disponível."
-        # Traduz automaticamente detectando o idioma de origem
-        translated = GoogleTranslator(source='auto', target='pt').translate(text)
-        return translated
-    except Exception:
-        return text  # Retorna o texto original caso ocorra falha na tradução
-
-def clean_and_format_summary(raw_html, max_length=300):
-    """Remove tags HTML e converte para texto limpo."""
-    text = html2text(raw_html).strip()
-    text = text.replace("\n", " ")
+def clean_html_to_pure_text(raw_html, max_length=350):
+    """Remove tags HTML, scripts, imagens e links para deixar apenas texto limpo."""
+    if not raw_html:
+        return "Sem resumo disponível."
+    
+    soup = BeautifulSoup(raw_html, "html.parser")
+    
+    # Remove tags que poluem a tradução
+    for element in soup(["script", "style", "img", "figure", "a"]):
+        element.decompose()
+        
+    text = soup.get_text(separator=" ").strip()
+    text = " ".join(text.split()) # Remove múltiplos espaços e quebras de linha
+    
     if len(text) > max_length:
         text = text[:max_length] + "..."
-    return text
+    return text if text else "Sem resumo disponível."
 
-def send_discord_embed(title, link, summary_pt, source_name):
-    """Formata e envia a notícia para o Discord via Webhook."""
+def translate_to_pt(text):
+    """Traduz texto puro para Português."""
+    if not text or text == "Sem resumo disponível.":
+        return text
+    try:
+        return GoogleTranslator(source='auto', target='pt').translate(text)
+    except Exception as e:
+        print(f"Erro na tradução: {e}")
+        return text
+
+def send_discord_embed(title, link, summary, source_name):
+    """
+    Envia a mensagem para o Discord.
+    (Sem enviar 'username' para respeitar o nome/avatar definidos no seu Webhook)
+    """
     payload = {
-        "username": "Global Cyber Intel",
-        "avatar_url": "https://cdn-icons-png.flaticon.com/512/2092/2092663.png",
         "embeds": [
             {
                 "title": f"🛡️ {title}",
                 "url": link,
-                "description": summary_pt,
-                "color": 3447003, # Cor azul-escuro/cyber
+                "description": summary,
+                "color": 3447003, # Cor Azul/Cyber
                 "footer": {
-                    "text": f"Fonte Original: {source_name} • Traduzido para PT-BR"
+                    "text": f"Fonte: {source_name} • Traduzido para PT-BR"
                 }
             }
         ]
     }
-    requests.post(DISCORD_WEBHOOK_URL, json=payload)
+    
+    response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+    if response.status_code not in [200, 204]:
+        print(f"Erro ao enviar para Discord: {response.status_code} - {response.text}")
 
-def fetch_latest_news():
-    for source in FEEDS:
+def main():
+    for source in FEEDS_CYBER:
         feed = feedparser.parse(source["url"])
         if feed.entries:
             latest = feed.entries[0]
@@ -63,15 +75,14 @@ def fetch_latest_news():
             link = latest.link
             raw_summary = getattr(latest, 'summary', getattr(latest, 'description', ''))
             
-            # Limpa o HTML e traduz título e resumo
-            clean_summary = clean_and_format_summary(raw_summary)
+            clean_text = clean_html_to_pure_text(raw_summary)
             title_pt = translate_to_pt(raw_title)
-            summary_pt = translate_to_pt(clean_summary)
+            summary_pt = translate_to_pt(clean_text)
             
             send_discord_embed(title_pt, link, summary_pt, source["name"])
 
 if __name__ == "__main__":
     if DISCORD_WEBHOOK_URL:
-        fetch_latest_news()
+        main()
     else:
-        print("Erro: DISCORD_WEBHOOK_URL não encontrada.")
+        print("Erro: Variável DISCORD_WEBHOOK_URL não configurada.")
