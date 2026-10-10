@@ -1,12 +1,11 @@
 import os
 import requests
 import feedparser
-from html2text import html2text
+from bs4 import BeautifulSoup
 from deep_translator import GoogleTranslator
 
 DISCORD_WEBHOOK_FRONT = os.getenv("DISCORD_WEBHOOK_FRONT")
 
-# Feeds do Ecossistema Frontend
 FEEDS_FRONTEND = [
     {"name": "Smashing Magazine", "url": "https://www.smashingmagazine.com/feed/"},
     {"name": "CSS-Tricks", "url": "https://css-tricks.com/feed/"},
@@ -15,39 +14,56 @@ FEEDS_FRONTEND = [
     {"name": "LogRocket Blog", "url": "https://blog.logrocket.com/feed/"}
 ]
 
+def clean_html_to_pure_text(raw_html, max_length=350):
+    """Remove tags HTML, imagens e links para deixar texto limpo."""
+    if not raw_html:
+        return "Sem resumo disponível."
+    
+    soup = BeautifulSoup(raw_html, "html.parser")
+    
+    # Remove elementos que poluem a tradução
+    for element in soup(["script", "style", "img", "figure", "a"]):
+        element.decompose()
+        
+    text = soup.get_text(separator=" ").strip()
+    text = " ".join(text.split())
+    
+    if len(text) > max_length:
+        text = text[:max_length] + "..."
+    return text if text else "Sem resumo disponível."
+
 def translate_to_pt(text):
+    """Traduz texto puro para Português."""
+    if not text or text == "Sem resumo disponível.":
+        return text
     try:
-        if not text.strip():
-            return "Sem resumo disponível."
         return GoogleTranslator(source='auto', target='pt').translate(text)
-    except Exception:
+    except Exception as e:
+        print(f"Erro na tradução: {e}")
         return text
 
-def clean_summary(raw_html, max_length=280):
-    text = html2text(raw_html).strip()
-    text = text.replace("\n", " ")
-    if len(text) > max_length:
-        return text[:max_length] + "..."
-    return text
-
 def send_discord_embed(title, link, summary, source_name):
-    """Envia as novidades para o canal de Frontend do Discord."""
+    """
+    Envia o Embed respeitando o NOME e AVATAR configurados no Discord.
+    (Sem enviar 'username' para não sobrescrever o que você escolheu)
+    """
     payload = {
-        "username": "Frontend Pulse Bot",
-        "avatar_url": "https://cdn-icons-png.flaticon.com/512/1055/1055687.png",
         "embeds": [
             {
                 "title": f"⚡ {title}",
                 "url": link,
                 "description": summary,
-                "color": 1752220, # Cor turquesa/frontend
+                "color": 1752220,  # Cor Turquesa
                 "footer": {
-                    "text": f"Fonte: {source_name} • Tendências Frontend"
+                    "text": f"Fonte: {source_name} • Traduzido para PT-BR"
                 }
             }
         ]
     }
-    requests.post(DISCORD_WEBHOOK_FRONT, json=payload)
+    
+    response = requests.post(DISCORD_WEBHOOK_FRONT, json=payload)
+    if response.status_code not in [200, 204]:
+        print(f"Erro ao enviar para Discord: {response.status_code} - {response.text}")
 
 def main():
     for source in FEEDS_FRONTEND:
@@ -59,7 +75,7 @@ def main():
             link = latest.link
             raw_summary = getattr(latest, 'summary', getattr(latest, 'description', ''))
             
-            clean_text = clean_summary(raw_summary)
+            clean_text = clean_html_to_pure_text(raw_summary)
             title_pt = translate_to_pt(raw_title)
             summary_pt = translate_to_pt(clean_text)
             
