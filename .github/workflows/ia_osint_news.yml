@@ -1,0 +1,19 @@
+name: Bot IA & OSINT
+
+on:
+  schedule:
+    - cron: '15 9 * * *' # 06:15 BRT (15 min de intervalo)
+  workflow_dispatch:
+
+jobs:
+  run-ia-osint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install -r requirements.txt
+      - env:
+          DISCORD_WEBHOOK_IA_OSINT: ${{ secrets.DISCORD_WEBHOOK_IA_OSINT }}
+        run: python ia_osint.py
