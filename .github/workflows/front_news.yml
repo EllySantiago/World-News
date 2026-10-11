@@ -7,13 +7,7 @@ on:
 
 jobs:
   run-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install -r requirements.txt
-      - env:
-          DISCORD_WEBHOOK_FRONT: ${{ secrets.DISCORD_WEBHOOK_FRONT }}
-        run: python front.py
+    uses: ./.github/workflows/_run_channel.yml
+    with:
+      channel: front
+    secrets: inherit
