@@ -1,5 +1,5 @@
-feedparser
-requests
-html2text
-deep-translator
-beautifulsoup4
+feedparser~=6.0
+requests~=2.32
+deep-translator~=1.11
+beautifulsoup4~=4.12
+trafilatura~=2.0
